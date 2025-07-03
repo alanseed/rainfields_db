@@ -1,7 +1,7 @@
 from pymongo.database import Database 
 from pymongo import ASCENDING 
 import argparse 
-from db_utils import get_db 
+from rainfields_db import get_db 
 
 # === Functions ===
 def setup_domain(db:Database, domain_name:str):

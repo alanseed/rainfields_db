@@ -1,9 +1,10 @@
-from typing import Optional
+from typing import Optional, Dict
 from urllib.parse import quote_plus
 from pathlib import Path
 from dotenv import load_dotenv
 from pymongo.database import Database
 from pymongo import MongoClient
+from pymongo import ASCENDING,DESCENDING
 import os
 import logging
 
@@ -33,3 +34,23 @@ def get_db(mongo_port: Optional[int] = None) -> Database:
     logging.info(f"Connecting to MongoDB with: {connect_string}")
     client = MongoClient(connect_string)
     return client[target_db]
+
+def get_config(db: Database, name: str) -> Dict:
+    """_summary_
+    Return the most recent configuration setting 
+    Args:
+        db (pymongo.MongoClient): Project database 
+
+    Returns:
+        Dict: Project configuration dictionary
+    """
+
+    config_coll = db["config"]
+    record = config_coll.find_one({'config.name': name}, sort=[
+                                  ('time', DESCENDING)])
+    if record is None:
+        logging.error(f"Could not find configuration for domain {name}")
+        return {}
+
+    config = record['config']
+    return config

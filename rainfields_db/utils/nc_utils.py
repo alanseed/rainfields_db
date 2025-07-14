@@ -110,7 +110,7 @@ def write_netcdf_buffer(rain: xr.DataArray, valid_time: datetime.datetime) -> io
 
     return io.BytesIO(nc_bytes)
 
-def write_nc_stream_to_file(buffer: io.BytesIO, path: str) -> None:
+def write_buffer_to_file(buffer: io.BytesIO, path: str) -> None:
     buffer.seek(0)
     with open(path, "wb") as f:
         f.write(buffer.read())

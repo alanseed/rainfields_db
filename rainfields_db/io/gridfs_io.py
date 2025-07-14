@@ -9,7 +9,7 @@ import logging
 import datetime
 import copy
 from pymongo import ASCENDING
-from typing import Optional
+from typing import Optional, Tuple
 from rainfields_db import read_netcdf_buffer
 
 def write_state(db: Database, name: str, cascade_dict: dict, oflow: np.ndarray,
@@ -59,7 +59,7 @@ def write_state(db: Database, name: str, cascade_dict: dict, oflow: np.ndarray,
     file_id = bucket.upload_from_stream(file_name, buffer, metadata=metadata)
     return file_id
 
-def read_state(db: Database, name: str, file_name: str):
+def get_state(db: Database, name: str, file_name: str):
     """
     Loads a pysteps cascade decomposition dictionary and optical flow from MongoDB's GridFSBucket.
 
@@ -125,35 +125,39 @@ def write_rainfield(db: Database, name: str, filename: str, nc_buf, metadata: di
     bucket.upload_from_stream(filename, nc_buf, metadata=metadata)
 
 
-def read_rainfield(db:Database, name:str, file_id:str):
-    """_summary_
-    Read rain field from the GridFSBucket 
+def get_rainfield(db: Database, name: str, filename: str) -> Tuple[xr.DataArray, dict]:
+    """
+    Read a rain field from GridFSBucket by filename and return the DataArray and metadata.
+
     Args:
-        db (Database): database 
-        name (str): Domain name
-        file_id (str): _id of the file 
+        db (Database): The MongoDB database connection.
+        name (str): Domain name (used to construct bucket name).
+        filename (str): Unique filename (as returned by make_nc_name).
 
     Returns:
-        _type_: _description_
+        Tuple[xr.DataArray, dict]: Rain field and metadata dictionary.
     """
-
     bname = f"{name}.rain"
     bucket = GridFSBucket(db, bucket_name=bname)
-    
+
     buf = BytesIO()
-    bucket.download_to_stream(file_id, buf)
+    try:
+        bucket.download_to_stream_by_name(filename, buf)
+    except Exception as e:
+        logging.error(f"Could not download {filename} from bucket {bname}: {e}")
+        raise
+
     buf.seek(0)
-    rainfield,vtime = read_netcdf_buffer(buf.read())
-    
+    rainfield, vtime = read_netcdf_buffer(buf.read())
+
     # Retrieve metadata
     mname = f"{name}.rain.files"
-    result = db[mname].find_one({"_id": file_id})
-    metadata = result.get("metadata", {}) if result is not None else None 
-    
+    result = db[mname].find_one({"filename": filename})
+    metadata = result.get("metadata", {}) if result else {}
+
     return rainfield, metadata
 
-
-def read_states_df(db: Database, name: str, query: dict,
+def get_states_df(db: Database, name: str, query: dict,
                    get_cascade: Optional[bool] = True,
                    get_optical_flow: Optional[bool] = True
                    ) -> pd.DataFrame:
@@ -240,11 +244,11 @@ def read_states_df(db: Database, name: str, query: dict,
     df["base_time"] = df["base_time"].astype("object")
     return df
 
-def read_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
+def get_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
     """
     Retrieve rainfields from a GridFSBucket,
     returned as a pandas DataFrame with columns: product, valid_time, base_time, ensemble, rainfield, metadata.
-    where valid_time and base_time are datetime.datetime objects with UTC timezone.
+    valid_time and base_time are timezone-aware datetime.datetime objects or None.
     """
     fs = GridFSBucket(db, bucket_name=f"{name}.rain")
     meta_coll = db[f"{name}.rain.files"]
@@ -264,15 +268,11 @@ def read_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
     for doc in results:
         rain_file = doc["filename"]
 
-        if "metadata" not in doc:
-            logging.warning(f"No metadata in document for file {rain_file}, skipping.")
-            continue
-        metadata_dict = doc["metadata"]
-
+        metadata_dict = doc.get("metadata", {})
         product = metadata_dict.get("product")
         valid_time = metadata_dict.get("valid_time")
-        base_time = metadata_dict.get("base_time", "NA")
-        ensemble = metadata_dict.get("ensemble", "NA")
+        base_time = metadata_dict.get("base_time")
+        ensemble = metadata_dict.get("ensemble")
 
         if valid_time is None:
             logging.warning(f"No valid_time in metadata for file {rain_file}, skipping.")
@@ -280,22 +280,17 @@ def read_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
         if valid_time.tzinfo is None or valid_time.tzinfo.utcoffset(valid_time) is None:
             valid_time = valid_time.replace(tzinfo=datetime.timezone.utc)
 
-        if base_time is not None and base_time != "NA":
+        if base_time is not None:
             if base_time.tzinfo is None or base_time.tzinfo.utcoffset(base_time) is None:
                 base_time = base_time.replace(tzinfo=datetime.timezone.utc)
-        else:
-            base_time = "NA"
-
-        if ensemble is None:
-            ensemble = "NA"
 
         try:
             buffer = BytesIO()
             fs.download_to_stream_by_name(rain_file, buffer)
             buffer.seek(0)
-            rainfield, vtime = read_netcdf_buffer(buffer.read())
+            rainfield, _ = read_netcdf_buffer(buffer.read())
         except Exception as e:
-            logging.warning(f"Could not load state file {rain_file}: {e}")
+            logging.warning(f"Could not load rainfield from '{rain_file}': {e}")
             continue
 
         records.append({
@@ -308,30 +303,31 @@ def read_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(records)
-    df["valid_time"] = df["valid_time"].astype("object")
-    df["base_time"] = df["base_time"].astype("object")
+    df["ensemble"] = df["ensemble"].astype("Int64")  # Nullable int
 
     return df
 
-def make_metadata(rain:xr.DataArray, product:str, name:str, valid_time:datetime.datetime, base_time:Optional[datetime.datetime] = None, 
-                  ensemble:Optional[int] = None ):
-
+def make_metadata(
+    rain: xr.DataArray,
+    product: str,
+    name: str,
+    valid_time: datetime.datetime,
+    base_time: Optional[datetime.datetime] = None,
+    ensemble: Optional[int] = None
+) -> dict:
     """
     Generate the metadata dictionary to be written to the database.
 
-    Args:
-        rain (xr.DataArray): The rainfall field
-        product (str): Product name (e.g., "qpe", "fx")
-        name (str): Domain name
-        valid_time (datetime): Valid time of the field (must be timezone-aware)
-        base_time (datetime, optional): Forecast base time (timezone-aware)
-        ensemble (int, optional): Ensemble member index
-
     Returns:
-        dict: Metadata dictionary
+        dict: Metadata dictionary with statistics and timing.
     """
+    if valid_time.tzinfo is None or valid_time.tzinfo.utcoffset(valid_time) is None:
+        raise ValueError("valid_time must be timezone-aware (UTC)")
+
+    if base_time is not None and (base_time.tzinfo is None or base_time.tzinfo.utcoffset(base_time) is None):
+        raise ValueError("base_time must be timezone-aware (UTC) if provided")
+
     war = np.count_nonzero(rain >= 1) / rain.size
-    fx_lead_time = (valid_time - base_time).total_seconds() if base_time is not None else None 
 
     metadata = {
         "product": product,
@@ -339,10 +335,11 @@ def make_metadata(rain:xr.DataArray, product:str, name:str, valid_time:datetime.
         "ensemble": ensemble,
         "base_time": base_time,
         "valid_time": valid_time,
-        "mean": float(rain.mean()),
-        "wetted_area_ratio": float(war),
-        "std_dev": float(rain.std()),
-        "max": float(rain.max()),
-        "forecast_lead_time": fx_lead_time 
+        "mean": float(np.round(rain.mean(),3)),
+        "wetted_area_ratio": float(np.round(war,3)),
+        "std_dev": float(np.round(rain.std(),3)),
+        "max": float(np.round(rain.max(),3)),
+        "forecast_lead_time": (valid_time - base_time).total_seconds() if base_time else None
     }
-    return metadata 
+
+    return metadata

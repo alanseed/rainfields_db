@@ -1,10 +1,12 @@
 from typing import Optional, Dict
 from urllib.parse import quote_plus
 from pathlib import Path
-from dotenv import load_dotenv
+from dotenv import load_dotenv 
+import datetime
 from pymongo.database import Database
 from pymongo import MongoClient
-from pymongo import ASCENDING,DESCENDING
+from pymongo import ASCENDING,DESCENDING 
+from pymongo import errors
 import os
 import logging
 
@@ -54,3 +56,26 @@ def get_config(db: Database, name: str) -> Dict:
 
     config = record['config']
     return config
+
+def write_config(config: dict):
+
+    """Write the configuration to the config collection in the MongoDB database"""
+    record = {
+        "time": datetime.datetime.now(datetime.timezone.utc),
+        "config": config
+    }
+
+    try:
+        db = get_db()
+        collection = db["config"]
+
+        # Insert the record
+        result = collection.insert_one(record)
+        logging.info(
+            f"Configuration inserted successfully. Document ID: {result.inserted_id}")
+
+    except errors.ServerSelectionTimeoutError:
+        logging.error(
+            "Failed to connect to MongoDB. Check if MongoDB is running and the URI is correct.")
+    except errors.PyMongoError as e:
+        logging.error(f"MongoDB error: {e}")

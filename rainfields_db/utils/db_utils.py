@@ -91,7 +91,7 @@ def write_config(config: dict):
 def get_parameters_df(query: Dict, param_coll:Collection) -> pd.DataFrame:
     """
     Retrieve STEPS parameters from the database and return a DataFrame
-    indexed by (valid_time, base_time, ensemble), using 'NA' as sentinel for missing values.
+    indexed by (valid_time, base_time, ensemble).
 
     Args:
         query (dict): MongoDB query dictionary.
@@ -116,12 +116,10 @@ def get_parameters_df(query: Dict, param_coll:Collection) -> pd.DataFrame:
                 valid_time = valid_time.replace(tzinfo=datetime.timezone.utc)
 
             base_time = metadata.get("base_time")
-            if base_time is None:
-                base_time = "NA"
-            elif base_time.tzinfo is None:
+            if base_time is not None and base_time.tzinfo is None:
                 base_time = base_time.replace(tzinfo=datetime.timezone.utc)
 
-            ensemble = metadata.get("ensemble") if metadata.get("ensemble") is not None else "NA"
+            ensemble = metadata.get("ensemble") if metadata.get("ensemble") is not None else None
             param = StochasticRainParameters.from_dict(doc)
 
             param.calc_corl()

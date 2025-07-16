@@ -192,8 +192,8 @@ def get_states_df(db: Database, name: str, query: dict,
 
         product = metadata_dict.get("product")
         valid_time = metadata_dict.get("valid_time") 
-        base_time = metadata_dict.get("base_time", "NA")
-        ensemble = metadata_dict.get("ensemble", "NA")
+        base_time = metadata_dict.get("base_time")
+        ensemble = metadata_dict.get("ensemble")
 
         if valid_time is None:
             logging.warning(f"No valid_time in metadata for file {state_file}, skipping.")
@@ -201,13 +201,8 @@ def get_states_df(db: Database, name: str, query: dict,
         if valid_time.tzinfo is None:
             valid_time = valid_time.replace(tzinfo=datetime.timezone.utc)
 
-        if base_time is not None and base_time != "NA" and base_time.tzinfo is None:
+        if base_time is not None and base_time.tzinfo is None:
             base_time = base_time.replace(tzinfo=datetime.timezone.utc)
-
-        if base_time is None:
-            base_time = "NA"
-        if ensemble is None:
-            ensemble = "NA"
 
         try:
             buffer = BytesIO()
@@ -308,7 +303,8 @@ def get_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
         })
 
     df = pd.DataFrame(records)
-    df["ensemble"] = df["ensemble"].astype("Int64")  # Nullable int
+    df["valid_time"] = df["valid_time"].astype("object")
+    df["base_time"] = df["base_time"].astype("object")
 
     return df
 

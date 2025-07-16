@@ -4,11 +4,9 @@ import pytest
 import datetime
 import numpy as np
 import xarray as xr
-
-import pytest
 from pymongo.database import Database
 from rainfields_db import get_db
-
+from typing import Generator
 from rainfields_db import (
     get_db,
     generate_coords,
@@ -21,13 +19,13 @@ from rainfields_db import (
 )
 
 @pytest.fixture
-def test_db() -> Database:
+def test_db() -> Generator[Database, None, None]:
     """
     Fixture that yields a connection to the test database and
     drops it after the test runs.
     """
     db = get_db()
-    assert db.name == "test", "Expected to use test as test DB"
+    assert db.name == "rainfields_db", "Expected to use rainfields_db as test DB"
 
     yield db
 

@@ -10,7 +10,11 @@ from .utils.nc_utils import (
 
 from .utils.db_utils import (
     get_db, 
-    get_config
+    get_config,
+    write_config,
+    get_parameters_df,
+    get_central_wavelengths,
+    get_base_time
 )
 
 from .io.gridfs_io import (
@@ -33,6 +37,10 @@ __all__ = [
     # db_utils
     "get_db",
     "get_config",
+    "write_config",
+    "get_parameters_df",
+    "get_central_wavelengths",
+    "get_base_time",
     # gridfs_io
     "get_rainfield",
     "get_rainfields_df",

@@ -91,14 +91,15 @@ def write_config(config: dict):
 def get_parameters_df(query: Dict, param_coll:Collection) -> pd.DataFrame:
     """
     Retrieve STEPS parameters from the database and return a DataFrame
-    indexed by (valid_time, base_time, ensemble).
 
     Args:
         query (dict): MongoDB query dictionary.
         param_coll (pymongo.collection.Collection): MongoDB collection.
 
     Returns:
-        pd.DataFrame: Indexed by (valid_time, base_time, ensemble), with a 'param' column.
+        pd.DataFrame: with columns ["valid_time", "base_time", "ensemble", "param"]
+        where the dates are datetime.datetime and param is a StochasticRainParameters class
+
     """
     records = []
 
@@ -107,9 +108,6 @@ def get_parameters_df(query: Dict, param_coll:Collection) -> pd.DataFrame:
             metadata = doc.get("metadata", {}) 
             if metadata is None:
                 continue 
-
-            # if doc["cascade"]["lag1"] is None or doc["cascade"]["lag2"] is None:
-            #     continue
 
             valid_time = metadata.get("valid_time")
             if valid_time is not None and valid_time.tzinfo is None:

@@ -223,18 +223,18 @@ def read_netcdf_buffer(buffer: bytes) -> tuple[xr.DataArray, datetime.datetime]:
 
     return rain_da, valid_time
 
-def make_nc_name(name: str, prod: str, valid_time: datetime.datetime,
+def make_nc_name(domain: str, prod: str, valid_time: datetime.datetime,
                  base_time: Optional[datetime.datetime] = None, ens: Optional[int] = None,
                  name_template: Optional[str] = None) -> str:
     """
     Generate a unique name for a single rain field using a formatting template.
 
     Default templates:
-        Forecast products: "$N_$P_$V{%Y%m%dT%H%M%S}_$B{%Y%m%dT%H%M%S}_$E.nc"
-        QPE products: "$N_$P_$V{%Y%m%dT%H%M%S}.nc"
+        Forecast products: "$D_$P_$V{%Y%m%dT%H%M%S}_$B{%Y%m%dT%H%M%S}_$E.nc"
+        QPE products: "$D_$P_$V{%Y%m%dT%H%M%S}.nc"
 
     Where:
-        $N = Domain name
+        $D = Domain name
         $P = Product name
         $V = Valid time (with strftime format)
         $B = Base time (with strftime format)
@@ -252,7 +252,7 @@ def make_nc_name(name: str, prod: str, valid_time: datetime.datetime,
 
     # Default template logic
     if name_template is None:
-        name_template = "$N_$P_$V{%Y%m%dT%H%M%S}"
+        name_template = "$D_$P_$V{%Y%m%dT%H%M%S}"
         if base_time is not None:
             name_template += "_$B{%Y%m%dT%H%M%S}"
         if ens is not None:
@@ -291,8 +291,8 @@ def make_nc_name(name: str, prod: str, valid_time: datetime.datetime,
 
                 result = result[:flag_posn] + time_str + result[field_end + 1:]
 
-            elif f_type == 'N':
-                result = result[:flag_posn] + name + result[flag_posn + 2:]
+            elif f_type == 'D':
+                result = result[:flag_posn] + domain + result[flag_posn + 2:]
             elif f_type == 'P':
                 result = result[:flag_posn] + prod + result[flag_posn + 2:]
             elif f_type == 'E' and ens is not None:

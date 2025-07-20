@@ -117,12 +117,12 @@ def write_buffer_to_file(buffer: io.BytesIO, path: str) -> None:
         f.write(buffer.read())
 
 
-def generate_coords(config):
+def generate_coords(domain):
     """
     Generate x and y coordinate arrays from the configuration dictionary.
 
     Args:
-        config (dict): Configuration dictionary expected to contain a 'domain' section with:
+        domain (dict): Configuration dictionary expected to contain a 'domain' section with:
             - start_x (float)
             - start_y (float)
             - p_size (float)
@@ -136,9 +136,6 @@ def generate_coords(config):
         KeyError: If required keys are missing in the config.
         TypeError/ValueError: If values are of incorrect type.
     """
-    domain = config.get('domain')
-    if domain is None or not isinstance(domain, dict):
-        raise KeyError("Missing or malformed 'domain' section in config")
 
     required_keys = ['start_x', 'start_y', 'p_size', 'n_rows', 'n_cols']
     missing = [key for key in required_keys if key not in domain]

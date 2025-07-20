@@ -108,7 +108,7 @@ def get_state(db: Database, name: str, file_name: str):
     return cascade_dict, oflow, metadata
 
 
-def write_rainfield(db: Database, name: str, filename: str, nc_buf, metadata: dict) -> None:
+def write_rainfield(db: Database, filename: str, nc_buf, metadata: dict) -> None:
     """
     Uploads a NetCDF rain field to MongoDB's GridFSBucket, replacing any existing file.
 
@@ -119,10 +119,10 @@ def write_rainfield(db: Database, name: str, filename: str, nc_buf, metadata: di
         nc_buf (BytesIO or memoryview): The NetCDF binary buffer.
         metadata (dict): Metadata to associate with the file.
     """
-    bucket = GridFSBucket(db, bucket_name=f"{name}.rain")
+    bucket = GridFSBucket(db, bucket_name="rain")
 
     # Delete existing file with same filename if it exists
-    for old_file in db[f"{name}.rain.files"].find({"filename": filename}):
+    for old_file in db["rain.files"].find({"filename": filename}):
         bucket.delete(old_file["_id"])
 
     # Upload new file
@@ -142,7 +142,7 @@ def get_rainfield(db: Database, name: str, filename: str) -> Tuple[xr.DataArray,
     Returns:
         Tuple[xr.DataArray, dict]: Rain field and metadata dictionary.
     """
-    bname = f"{name}.rain"
+    bname = "rain"
     bucket = GridFSBucket(db, bucket_name=bname)
 
     buf = BytesIO()
@@ -156,7 +156,7 @@ def get_rainfield(db: Database, name: str, filename: str) -> Tuple[xr.DataArray,
     rainfield, vtime = read_netcdf_buffer(buf.read())
 
     # Retrieve metadata
-    mname = f"{name}.rain.files"
+    mname = "rain.files"
     result = db[mname].find_one({"filename": filename})
     metadata = result.get("metadata", {}) if result else {}
 
@@ -170,15 +170,15 @@ def get_states_df(db: Database, name: str, query: dict,
     Retrieve state fields (cascade and/or optical flow) from a GridFSBucket,
     returned as a pandas DataFrame with columns: product, valid_time, base_time, ensemble, cascade, optical_flow, metadata.
     """
-    fs = GridFSBucket(db, bucket_name=f"{name}.state")
-    meta_coll = db[f"{name}.state.files"]
+    fs = GridFSBucket(db, bucket_name="state")
+    meta_coll = db["state.files"]
 
     fields = {"_id": 0, "filename": 1, "metadata": 1}
     results_cursor = meta_coll.find(query, projection=fields).sort("filename", ASCENDING)
     results = list(results_cursor)
 
     if not results:
-        logging.warning(f"No state files found in '{name}.state.files' for query: {query}")
+        logging.warning(f"No state files found for query: {query}")
         return pd.DataFrame(columns=[
             "product", "valid_time", "base_time", "ensemble",
             "cascade", "optical_flow", "metadata"
@@ -231,6 +231,7 @@ def get_states_df(db: Database, name: str, query: dict,
             oflow = npzfile["oflow"]
 
         records.append({
+            "name":name,
             "product":product,
             "valid_time": valid_time,
             "base_time": base_time,
@@ -250,8 +251,8 @@ def get_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
     returned as a pandas DataFrame with columns: product, valid_time, base_time, ensemble, rainfield, metadata.
     valid_time and base_time are timezone-aware datetime.datetime objects or None.
     """
-    fs = GridFSBucket(db, bucket_name=f"{name}.rain")
-    meta_coll = db[f"{name}.rain.files"]
+    fs = GridFSBucket(db, bucket_name="rain")
+    meta_coll = db["rain.files"]
 
     fields = {"_id": 0, "filename": 1, "metadata": 1}
     results_cursor = meta_coll.find(query, projection=fields).sort("filename", ASCENDING)
@@ -294,6 +295,7 @@ def get_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
             continue
 
         records.append({
+            "name":name,
             "product": product,
             "valid_time": valid_time,
             "base_time": base_time,
@@ -331,11 +333,11 @@ def make_metadata(
     war = np.count_nonzero(rain >= 1) / rain.size
 
     metadata = {
-        "product": product,
         "domain": name,
-        "ensemble": ensemble,
-        "base_time": base_time,
+        "product": product,
         "valid_time": valid_time,
+        "base_time": base_time,
+        "ensemble": ensemble,
         "mean": float(np.round(rain.mean(),3)),
         "wetted_area_ratio": float(np.round(war,3)),
         "std_dev": float(np.round(rain.std(),3)),

@@ -84,29 +84,3 @@ def write_config(config: dict):
             "Failed to connect to MongoDB. Check if MongoDB is running and the URI is correct.")
     except errors.PyMongoError as e:
         logging.error(f"MongoDB error: {e}")
-
-def get_base_time(valid_time:datetime.datetime, product:str, name:str, db:Database) -> Optional[datetime.datetime]:
-    # Get the base_time for the nwp run nearest to the valid_time in UTC zone
-    # Assume spin-up of 3 hours
-    start_base_time = valid_time - datetime.timedelta(hours=27)
-    end_base_time = valid_time - datetime.timedelta(hours=3)
-    base_time_query = {
-        "metadata.product": product,
-        "metadata.base_time": {"$gte": start_base_time, "$lte": end_base_time}
-    }
-    col_name = f"{name}.rain.files"
-    nwp_base_times = db[col_name].distinct(
-        "metadata.base_time", base_time_query)
-
-    if not nwp_base_times:
-        logging.warning(
-            f"Failed to find {product} data for {valid_time}")
-        return None 
-
-    nwp_base_times.sort(reverse=True)
-    base_time = nwp_base_times[0]
-
-    if base_time.tzinfo is None:
-        base_time = base_time.replace(tzinfo=datetime.timezone.utc)
-
-    return base_time

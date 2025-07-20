@@ -14,8 +14,6 @@ from pymongo import errors
 import os
 import logging 
 import pandas as pd
-from models.steps_params import StochasticRainParameters 
-from models.cascade_utils import get_cascade_wavelengths 
 
 def get_db(mongo_port: Optional[int] = None) -> Database:
     # === Load admin and user environment files ===
@@ -86,77 +84,6 @@ def write_config(config: dict):
             "Failed to connect to MongoDB. Check if MongoDB is running and the URI is correct.")
     except errors.PyMongoError as e:
         logging.error(f"MongoDB error: {e}")
-
-
-def get_parameters_df(query: Dict, param_coll:Collection) -> pd.DataFrame:
-    """
-    Retrieve STEPS parameters from the database and return a DataFrame
-
-    Args:
-        query (dict): MongoDB query dictionary.
-        param_coll (pymongo.collection.Collection): MongoDB collection.
-
-    Returns:
-        pd.DataFrame: with columns ["valid_time", "base_time", "ensemble", "param"]
-        where the dates are datetime.datetime and param is a StochasticRainParameters class
-
-    """
-    records = []
-
-    for doc in param_coll.find(query).sort("metadata.valid_time", ASCENDING):
-        try:
-            metadata = doc.get("metadata", {}) 
-            if metadata is None:
-                continue 
-
-            valid_time = metadata.get("valid_time")
-            if valid_time is not None and valid_time.tzinfo is None:
-                valid_time = valid_time.replace(tzinfo=datetime.timezone.utc)
-
-            base_time = metadata.get("base_time")
-            if base_time is not None and base_time.tzinfo is None:
-                base_time = base_time.replace(tzinfo=datetime.timezone.utc)
-
-            ensemble = metadata.get("ensemble") if metadata.get("ensemble") is not None else None
-            param = StochasticRainParameters.from_dict(doc)
-
-            param.calc_corl()
-            records.append({
-                "valid_time": valid_time,
-                "base_time": base_time,
-                "ensemble": ensemble,
-                "param": param
-            })
-        except Exception as e:
-            print(f"Warning: could not parse parameter for {metadata.get('valid_time')}: {e}")  # type: ignore
-
-    if not records:
-        return pd.DataFrame({
-            "valid_time": pd.Series(dtype='object'),
-            "base_time": pd.Series(dtype='object'),
-            "ensemble": pd.Series(dtype='object'),
-            "param": pd.Series(dtype='object')  # holds StochasticRainParameters
-        })
-
-    df = pd.DataFrame(records)
-    df["valid_time"] = df["valid_time"].astype("object")
-    df["base_time"] = df["base_time"].astype("object")
-    return df
-
-def get_central_wavelengths(db:Database, name:str) -> float:
-    config = get_config(db, name)
-    n_levels = config["pysteps"].get("n_cascade_levels")
-    domain = config["domain"]
-    n_rows = domain.get("n_rows")
-    n_cols = domain.get("n_cols")
-    p_size = domain.get("p_size")
-    p_size_km = p_size / 1000.0
-    domain_size_km = max(n_rows, n_cols) * p_size_km
-
-    # Get central wavelengths
-    wavelengths_km = get_cascade_wavelengths(
-        n_levels, domain_size_km, p_size_km)
-    return wavelengths_km
 
 def get_base_time(valid_time:datetime.datetime, product:str, name:str, db:Database) -> Optional[datetime.datetime]:
     # Get the base_time for the nwp run nearest to the valid_time in UTC zone

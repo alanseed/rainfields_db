@@ -11,10 +11,7 @@ from .utils.nc_utils import (
 from .utils.db_utils import (
     get_db, 
     get_config,
-    write_config,
-    get_parameters_df,
-    get_central_wavelengths,
-    get_base_time
+    write_config
 )
 
 from .io.gridfs_io import (
@@ -25,6 +22,11 @@ from .io.gridfs_io import (
     write_rainfield, 
     write_state,
     make_metadata
+)
+
+from .io.params_io import (
+    get_param_docs,
+    write_param_docs
 )
 
 __all__ = [
@@ -38,9 +40,6 @@ __all__ = [
     "get_db",
     "get_config",
     "write_config",
-    "get_parameters_df",
-    "get_central_wavelengths",
-    "get_base_time",
     # gridfs_io
     "get_rainfield",
     "get_rainfields_df",
@@ -48,5 +47,8 @@ __all__ = [
     "get_states_df",
     "write_rainfield",
     "write_state",
-    "make_metadata"
+    "make_metadata",
+    #params_io
+    "get_param_docs",
+    "write_param_docs"
 ]

@@ -28,6 +28,10 @@ from .io.params_io import (
     get_param_docs,
     write_param_docs
 )
+from .io.stats_io import (
+    get_stats_docs,
+    write_stats_docs
+)
 
 __all__ = [
     # nc_utils
@@ -50,5 +54,7 @@ __all__ = [
     "make_metadata",
     #params_io
     "get_param_docs",
-    "write_param_docs"
+    "write_param_docs",
+    "get_stats_docs",
+    "write_stats_docs"
 ]

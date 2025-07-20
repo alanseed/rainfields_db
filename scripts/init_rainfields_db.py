@@ -8,6 +8,7 @@ Initialize MongoDB collections and indexes for rainfields system.
 Collections created:
 - rain.files / rain.chunks
 - state.files / state.chunks
+- stats
 - params
 - config
 - domains
@@ -16,16 +17,6 @@ Indexes:
 - Compound index on metadata for query efficiency
 - Index on filename for GridFS deletion lookup
 """
-
-def setup_config(db: Database):
-    config_coll = "config"
-    domain_coll = "domains"
-
-    for coll in [config_coll, domain_coll]:
-        db[coll].insert_one({"_test": True})
-        db[coll].delete_many({"_test": True})
-        db[coll].create_index("name", unique=True)
-        print(f"{coll} initialized with index on 'name'")
 
 # === Main ===
 if __name__ == "__main__":
@@ -85,6 +76,5 @@ if __name__ == "__main__":
     db[stats_coll].delete_many({"_test": True})
     print(f"{stats_coll} initialized")
 
-    setup_config(db)
     print("Setup complete.")
 

@@ -57,7 +57,7 @@ if __name__ == "__main__":
 
         print(f"{files_coll} and {chunks_coll} initialized with index")
 
-    # Create a per-domain params collection
+    # Create params collection
     params_coll = "params"
     db[params_coll].insert_one({"_test": True}) 
     db[params_coll].create_index([
@@ -70,6 +70,20 @@ if __name__ == "__main__":
 
     db[params_coll].delete_many({"_test": True})
     print(f"{params_coll} initialized")
+
+    # Create stats collection
+    stats_coll = "stats"
+    db[stats_coll].insert_one({"_test": True}) 
+    db[stats_coll].create_index([
+        ("metadata.domain",ASCENDING),
+        ("metadata.product", ASCENDING),
+        ("metadata.valid_time", ASCENDING),
+        ("metadata.base_time", ASCENDING),
+        ("metadata.ensemble", ASCENDING)
+    ], name="domain_product_valid_base_ensemble_idx")
+
+    db[stats_coll].delete_many({"_test": True})
+    print(f"{stats_coll} initialized")
 
     setup_config(db)
     print("Setup complete.")

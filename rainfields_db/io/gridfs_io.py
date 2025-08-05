@@ -17,14 +17,13 @@ from pymongo import ASCENDING
 from typing import Optional, Tuple
 from rainfields_db import read_netcdf_buffer
 
-def write_state(db: Database, name: str, cascade_dict: dict, oflow: np.ndarray,
+def write_state(db: Database, cascade_dict: dict, oflow: np.ndarray,
                             file_name: str, field_metadata: dict):
     """
     Stores a pysteps cascade decomposition dictionary and optical flow into MongoDB's GridFSBucket.
 
     Parameters:
         db (Database): The MongoDB database object.
-        name (str): Domain name used for the GridFS bucket (e.g., "AKL").
         cascade_dict (dict): The pysteps cascade decomposition dictionary.
         oflow (np.ndarray): The optical flow field.
         file_name (str): The unique name of the file to be stored.
@@ -34,10 +33,10 @@ def write_state(db: Database, name: str, cascade_dict: dict, oflow: np.ndarray,
         bson.ObjectId: The GridFS file ID.
     """
     assert cascade_dict["domain"] == "spatial", "Only 'spatial' domain is supported."
-    bucket = GridFSBucket(db, bucket_name=f"{name}.state")
+    bucket = GridFSBucket(db, bucket_name="state")
 
     # Delete existing file with same filename
-    for old_file in db[f"{name}.state.files"].find({"filename": file_name}):
+    for old_file in db["state.files"].find({"filename": file_name}):
         bucket.delete(old_file["_id"])
 
     # Serialize cascade data to compressed binary
@@ -47,7 +46,7 @@ def write_state(db: Database, name: str, cascade_dict: dict, oflow: np.ndarray,
 
     # Build metadata
     metadata = {
-        "domain": cascade_dict["domain"],
+        "domain": "spatial",
         "normalized": cascade_dict["normalized"],
         "transform": cascade_dict.get("transform"),
         "threshold": cascade_dict.get("threshold"),
@@ -64,36 +63,45 @@ def write_state(db: Database, name: str, cascade_dict: dict, oflow: np.ndarray,
     file_id = bucket.upload_from_stream(file_name, buffer, metadata=metadata)
     return file_id
 
-def get_state(db: Database, name: str, file_name: str):
+def get_state(db: Database, file_name: str):
     """
     Loads a pysteps cascade decomposition dictionary and optical flow from MongoDB's GridFSBucket.
+    Returns empty structures if the file is not in the database (assumed dry).
 
     Parameters:
         db (Database): The MongoDB database object.
-        name (str): The domain name used to identify the collection.
         file_name (str): The name of the file to retrieve.
 
     Returns:
         tuple: (cascade_dict, oflow, metadata)
     """
-    bucket = GridFSBucket(db, bucket_name=f"{name}.state")
+    bucket = GridFSBucket(db, bucket_name="state")
+    mname = "state.files"
+
+    # Look up metadata first
+    result = db[mname].find_one({"filename": file_name})
+    if result is None:
+        logging.info(f"{file_name} not listed in {mname} collection — assumed dry.")
+        return {}, np.array([]), {}
+
+    metadata = result.get("metadata", {})
 
     try:
         with bucket.open_download_stream_by_name(file_name) as stream:
-            metadata = stream.metadata
-            if metadata is None:
+            if stream.metadata is None:
                 raise ValueError(f"File '{file_name}' is missing required metadata.")
 
             buffer = BytesIO(stream.read())
     except Exception as e:
-        raise ValueError(f"Error reading '{file_name}' from GridFS: {e}")
+        logging.warning(f"Failed to download {file_name} from GridFS: {e}")
+        return {}, np.array([]), metadata  # Return empty cascade and oflow, but retain metadata
 
     npzfile = np.load(buffer)
 
     cascade_dict = {
         "cascade_levels": npzfile["cascade_levels"],
-        "domain": metadata["domain"],
-        "normalized": metadata["normalized"],
+        "domain": "spatial",
+        "normalized": metadata.get("normalized"),
         "transform": metadata.get("transform"),
         "threshold": metadata.get("threshold"),
         "zerovalue": metadata.get("zerovalue"),
@@ -106,7 +114,6 @@ def get_state(db: Database, name: str, file_name: str):
 
     oflow = npzfile["oflow"]
     return cascade_dict, oflow, metadata
-
 
 def write_rainfield(db: Database, filename: str, nc_buf, metadata: dict) -> None:
     """
@@ -129,40 +136,42 @@ def write_rainfield(db: Database, filename: str, nc_buf, metadata: dict) -> None
     nc_buf.seek(0)
     bucket.upload_from_stream(filename, nc_buf, metadata=metadata)
 
-
-def get_rainfield(db: Database, name: str, filename: str) -> Tuple[xr.DataArray, dict]:
+def get_rainfield(db: Database, filename: str) -> Tuple[xr.DataArray, dict]:
     """
     Read a rain field from GridFSBucket by filename and return the DataArray and metadata.
+    If the file is not listed in metadata (e.g., dry period), return an empty DataArray and metadata.
 
     Args:
         db (Database): The MongoDB database connection.
-        name (str): Domain name (used to construct bucket name).
         filename (str): Unique filename (as returned by make_nc_name).
 
     Returns:
         Tuple[xr.DataArray, dict]: Rain field and metadata dictionary.
     """
     bname = "rain"
-    bucket = GridFSBucket(db, bucket_name=bname)
+    mname = "rain.files"
+    result = db[mname].find_one({"filename": filename})
+    
+    if result is None:
+        logging.info(f"{filename} not listed in {mname} collection — assumed dry.")
+        return xr.DataArray(), {}
 
+    metadata = result.get("metadata", {})
+
+    # Only attempt GridFS read if metadata exists
+    bucket = GridFSBucket(db, bucket_name=bname)
     buf = BytesIO()
     try:
         bucket.download_to_stream_by_name(filename, buf)
+        buf.seek(0)
+        rainfield, _ = read_netcdf_buffer(buf.read())
     except Exception as e:
-        logging.error(f"Could not download {filename} from bucket {bname}: {e}")
-        raise
-
-    buf.seek(0)
-    rainfield, vtime = read_netcdf_buffer(buf.read())
-
-    # Retrieve metadata
-    mname = "rain.files"
-    result = db[mname].find_one({"filename": filename})
-    metadata = result.get("metadata", {}) if result else {}
+        logging.error(f"Failed to download {filename} from GridFS: {e}")
+        return xr.DataArray(), metadata  # Metadata exists, but file is missing
 
     return rainfield, metadata
 
-def get_states_df(db: Database, name: str, query: dict,
+def get_states_df(db: Database, query: dict,
                    get_cascade: Optional[bool] = True,
                    get_optical_flow: Optional[bool] = True
                    ) -> pd.DataFrame:
@@ -189,7 +198,7 @@ def get_states_df(db: Database, name: str, query: dict,
     for doc in results:
         state_file = doc["filename"]
         metadata_dict = doc.get("metadata", {})
-
+        domain = metadata_dict.get("domain")
         product = metadata_dict.get("product")
         valid_time = metadata_dict.get("valid_time") 
         base_time = metadata_dict.get("base_time")
@@ -217,7 +226,7 @@ def get_states_df(db: Database, name: str, query: dict,
         if get_cascade:
             cascade_dict = {
                 "cascade_levels": npzfile["cascade_levels"],
-                "domain": metadata_dict.get("domain"),
+                "domain": "spatial",
                 "normalized": metadata_dict.get("normalized"),
                 "transform": metadata_dict.get("transform"),
                 "threshold": metadata_dict.get("threshold"),
@@ -231,7 +240,7 @@ def get_states_df(db: Database, name: str, query: dict,
             oflow = npzfile["oflow"]
 
         records.append({
-            "name":name,
+            "domain":domain,
             "product":product,
             "valid_time": valid_time,
             "base_time": base_time,
@@ -245,7 +254,7 @@ def get_states_df(db: Database, name: str, query: dict,
     df["base_time"] = df["base_time"].astype("object")
     return df
 
-def get_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
+def get_rainfields_df(db: Database, query: dict) -> pd.DataFrame:
     """
     Retrieve rainfields from a GridFSBucket,
     returned as a pandas DataFrame with columns: product, valid_time, base_time, ensemble, rainfield, metadata.
@@ -259,7 +268,7 @@ def get_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
     results = list(results_cursor)
 
     if not results:
-        logging.warning(f"No rain files found in '{name}.rain.files' for query: {query}")
+        logging.warning(f"No rain files found in 'rain.files' for query: {query}")
         return pd.DataFrame(columns=[
             "product", "valid_time", "base_time", "ensemble", "rainfield", "metadata"
         ])
@@ -270,6 +279,7 @@ def get_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
         rain_file = doc["filename"]
 
         metadata_dict = doc.get("metadata", {})
+        domain = metadata_dict.get("domain")
         product = metadata_dict.get("product")
         valid_time = metadata_dict.get("valid_time")
         base_time = metadata_dict.get("base_time")
@@ -295,7 +305,7 @@ def get_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
             continue
 
         records.append({
-            "name":name,
+            "domain":domain,
             "product": product,
             "valid_time": valid_time,
             "base_time": base_time,
@@ -313,7 +323,7 @@ def get_rainfields_df(db: Database, name: str, query: dict) -> pd.DataFrame:
 def make_metadata(
     rain: xr.DataArray,
     product: str,
-    name: str,
+    domain: str,
     valid_time: datetime.datetime,
     base_time: Optional[datetime.datetime] = None,
     ensemble: Optional[int] = None
@@ -333,7 +343,7 @@ def make_metadata(
     war = np.count_nonzero(rain >= 1) / rain.size
 
     metadata = {
-        "domain": name,
+        "domain": domain,
         "product": product,
         "valid_time": valid_time,
         "base_time": base_time,

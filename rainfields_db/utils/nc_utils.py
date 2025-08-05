@@ -249,9 +249,9 @@ def make_nc_name(domain: str, prod: str, valid_time: datetime.datetime,
 
     # Default template logic
     if name_template is None:
-        name_template = "$D_$P_$V{%Y%m%dT%H%M%S}"
+        name_template = "$D_$P_$V{%Y-%m-%dT%H:%M:%S}"
         if base_time is not None:
-            name_template += "_$B{%Y%m%dT%H%M%S}"
+            name_template += "_$B{%Y-%m-%dT%H:%M:%S}"
         if ens is not None:
             name_template += "_$E"
         name_template += ".nc"
@@ -300,3 +300,8 @@ def make_nc_name(domain: str, prod: str, valid_time: datetime.datetime,
             raise ValueError(f"Error processing flag '${f_type}': {e}")
 
     return result
+
+def ensure_utc(dt):
+    if dt and dt.tzinfo is None:
+        return dt.replace(tzinfo=datetime.timezone.utc)
+    return dt

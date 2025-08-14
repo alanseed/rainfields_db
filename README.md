@@ -26,7 +26,7 @@ The file naming convention can be configured as part of the product specificatio
 * $B is the forecast base time in UTC if the product is a forecast  
 * $E is the ensemble number if this product is an ensemble forecast  
 
-## Data base structure   
+## Data base structure  
 
 The database consists of a set of collections:  
 
@@ -65,21 +65,28 @@ DB_PWD=xxxx
 DB_NAME=rainfields_db  
 ```
 
-The rainfields_db is created by a database administrator who then assigns users to the database using the  
+The rainfields_db is initialized once the environment fields are setup using the  
 scripts in the rainfields_db/scripts directory.  
 
-* init_rainfields_db.py - Initialize a database with the expected collections and indexes  
-* create_mongo_user.py - A script to assign a user with authentication to a database  
+* init_rainfields_db.py -  
+    Initialize a database with the expected collections and indexes  
+* create_mongo_user.py -  
+    A script to assign a user with authentication to a database  
 
 ## io  
 
-* gridfs_io.py - functions that manage reading and writing the binary netCDF and pySTEPS cascade data  
-using the MongoDB GridFSBucket functions.  
-* params_io.py - functions that manage reading and writing the parameter documents  
-* stats_io.py - functions that manage reading and writing the field statistics doduments  
+* gridfs_io.py -  
+    Functions that manage reading and writing the binary netCDF and pySTEPS cascade data using 
+    the MongoDB GridFSBucket functions.  
+* params_io.py -  
+    Functions that manage reading and writing the parameter documents  
+* stats_io.py -  
+    Functions that manage reading and writing the field statistics doduments  
 
 ## utils  
 
-* db_utils.py - functions that are used to connect to the correct database and read and write a configuration  
-document.  
-* nc_utils.py - functions to read and write netCDF files from the GridFS "rain" collections.  
+* db_utils.py -  
+    Functions that are used to connect to the correct database and read and write a configuration  
+    document.  
+* nc_utils.py -  
+    Functions to read and write netCDF files from the GridFS "rain" collections.  

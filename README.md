@@ -66,12 +66,12 @@ DB_NAME=rainfields_db
 ```
 
 The rainfields_db is initialized once the environment fields are setup using the  
-scripts in the rainfields_db/scripts directory.  
+scripts in the rainfields_db/scripts directory. First create a user and then initialize the database  
 
-* init_rainfields_db.py -  
-    Initialize a database with the expected collections and indexes  
-* create_mongo_user.py -  
+** create_mongo_user.py -  
     A script to assign a user with authentication to a database  
+ init_rainfields_db.py -  
+    Initialize a database with the expected collections and indexes  
 
 ## io  
 

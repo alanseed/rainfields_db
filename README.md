@@ -2,7 +2,76 @@
 
 A Mongo database manager for pySTEPS radar rainfal, state, and parameters.  
 
-## Rain fall grid identification and format  
+## Set up the MongoDB admin and user   
+
+Need to create the admin user for the database and enable security
+
+1. Set up the admin user 
+
+```
+mongosh
+use admin
+db.createUser({
+  user: "myAdmin",
+  pwd: "myPassword",
+  roles: [ { role: "userAdminAnyDatabase", db: "admin" }, "readWriteAnyDatabase" ]
+})
+```
+2. Set up the admin_credentials for rainfields_db  
+
+Create a .rainfields_admin.env file in the $HOME directory 
+
+```bash  
+# Admin
+ADMIN_USER=xxxx
+ADMIN_PWD=xxxx
+AUTH_DB=admin
+MONGO_HOST=localhost
+MONGO_PORT=27017  
+
+```  
+
+3. Install dependencies  
+
+Install rainfields_db in the pysteps environment  
+
+From the rainfields_db directory
+pip install . 
+
+Need to add the following in the environment
+dotenv
+pymongo
+netCDF4 
+
+4. Create the rainfields_db user
+
+``` bash
+
+python create_mongo_user.py --help 
+usage: create_mongo_user.py [-h] [--db DB] [--role ROLE] [--password PASSWORD] username
+
+Create a MongoDB user for a selected database.
+
+positional arguments:
+  username             Username to create
+
+options:
+  -h, --help           show this help message and exit
+  --db DB              Target MongoDB database (default: rainfields_db)
+  --role ROLE          MongoDB role (default: readWrite)
+  --password PASSWORD  Optional password (otherwise generated)
+
+```  
+
+This generates a file with the credentials for the rainfields_db user in $HOME
+```bash  
+cat ~/.rainfields_user.env
+DB_NAME=rainfields_db
+DB_USER=radar
+DB_PWD=radar
+```
+
+## Rain grid identification and format  
 
 A rainfall grid is identified by:
 
@@ -36,42 +105,6 @@ The database consists of a set of collections:
 * stats - A collection with the field statistics for each product  
 * rain - A MongoDB GridFS collection of rain fields that are stored as netCDF binaries  
 * state - A MongoDB GridFS collection of rainfield cascades and the Optical Flow advection fields  
-
-## Database adinistration  
-
-The system admiministrator initialies a rainfields_db database and allocates users to it.  
-
-The envoronment variables for the data base are managed by two files in each user's home directory:  
-
-.rainfields_admin.env  
-Manages the username and password of the system administrator for the MongoDB system, and the location of the database (which could also be a MongoAtlas instance)  
-
-```bash  
-# Admin
-ADMIN_USER=xxxx
-ADMIN_PWD=xxxx
-AUTH_DB=admin
-MONGO_HOST=localhost
-MONGO_PORT=27017  
-
-```  
-
-.rainfields_user.env  
-Manages the name of the database and the credentials needed for read/write access to that specific database.  
-
-```bash  
-DB_USER=xxxx  
-DB_PWD=xxxx
-DB_NAME=rainfields_db  
-```
-
-The rainfields_db is initialized once the environment fields are setup using the  
-scripts in the rainfields_db/scripts directory. First create a user and then initialize the database  
-
-** create_mongo_user.py -  
-    A script to assign a user with authentication to a database  
- init_rainfields_db.py -  
-    Initialize a database with the expected collections and indexes  
 
 ## io  
 
